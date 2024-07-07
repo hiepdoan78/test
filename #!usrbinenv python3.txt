@@ -6,7 +6,7 @@ from geometry_msgs.msg import Twist
 from std_msgs.msg import Float64
 import math
 import serial
-from threading import Lock
+from threading import Timer, Lock
 
 class SerialController(Node):
     def __init__(self):
@@ -36,7 +36,12 @@ class SerialController(Node):
         self.get_logger().info(f"Connected to {self.conn.port}")
         self.mutex = Lock()
 
+        self.timeout = 2.0  # 2 seconds timeout
+        self.timer = None
+
     def cmd_vel_callback(self, msg):
+        self.reset_timer()
+        
         steering_angle = self.calculate_steering_angle(msg.angular.z, msg.linear.x)
         wheel_velocity = msg.linear.x
         
@@ -87,6 +92,24 @@ class SerialController(Node):
         data = f"{steering_angle:.3f};{wheel_velocity:.3f}\n"
         self.send_command(data)
         self.get_logger().info(f"Sent data to serial: {data.strip()}")
+
+    def reset_timer(self):
+        if self.timer:
+            self.timer.cancel()
+        self.timer = Timer(self.timeout, self.stop_robot)
+        self.timer.start()
+
+    def stop_robot(self):
+        self.get_logger().info("No command received for 2 seconds. Stopping the robot.")
+        stop_steering_msg = Float64()
+        stop_steering_msg.data = 0.0
+        self.steering_publisher.publish(stop_steering_msg)
+
+        stop_wheel_msg = Float64()
+        stop_wheel_msg.data = 0.0
+        self.wheel_publisher.publish(stop_wheel_msg)
+
+        self.send_serial_data(0.0, 0.0)
 
 def main(args=None):
     rclpy.init(args=args)
