@@ -19,7 +19,7 @@ class SerialController(Node):
         self.steering_publisher = self.create_publisher(Float64, '/servo_steering_controller/command', 10)
         self.wheel_publisher = self.create_publisher(Float64, '/rear_wheel_controller/command', 10)
         self.wheelbase_length = 0.26
-        self.wheelbase_width = 0.26
+        self.wheelbase_width = 0.213
 
         self.declare_parameter('serial_port', value="/dev/ttyAMA10")
         self.serial_port_name = self.get_parameter('serial_port').value
@@ -57,11 +57,22 @@ class SerialController(Node):
         self.send_serial_data(steering_angle, wheel_velocity)
     
     def calculate_steering_angle(self, angular_velocity, linear_velocity):
-        if linear_velocity == 0.0:
-            return 0.0
-        steering_angle = math.atan(self.wheelbase_length /((self.wheelbase_length * angular_velocity / linear_velocity)-self.wheelbase_width/2) )
-        return steering_angle
-
+        if linear_velocity == 0.0 and angular_velocity == 0:
+            return 0.0, 0.0
+        elif linear_velocity == 0.0 and angular_velocity > 0:
+            steering_angle = math.atan(self.wheelbase_length /((self.wheelbase_length * angular_velocity / 0.5)-self.wheelbase_width/2))
+            return steering_angle, 0.5
+        elif linear_velocity == 0.0 and angular_velocity < 0:
+            steering_angle = math.atan(self.wheelbase_length /((self.wheelbase_length * angular_velocity / 0.5)+self.wheelbase_width/2))
+            return steering_angle, 0.5
+        elif linear_velocity != 0:
+            if angular_velocity > 0:
+                steering_angle = math.atan(self.wheelbase_length /((self.wheelbase_length * angular_velocity / 0.5)-self.wheelbase_width/2))
+            elif angular_velocity < 0:
+                steering_angle = math.atan(self.wheelbase_length /((self.wheelbase_length * angular_velocity / 0.5)+self.wheelbase_width/2))
+            else:
+                steering_angle = 0.0
+            return steering_angle, linear_velocity
     def send_command(self, cmd_string):
         self.mutex.acquire()
         try:
