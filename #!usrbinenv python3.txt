@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import Twist
+from std_msgs.msg import Float64
+import math
+import serial
+from threading import Lock
+
+class SerialController(Node):
+    def __init__(self):
+        super().__init__('serial_controller')
+        self.subscription = self.create_subscription(
+            Twist,
+            '/cmd_vel',
+            self.cmd_vel_callback,
+            10)
+        self.steering_publisher = self.create_publisher(Float64, '/servo_steering_controller/command', 10)
+        self.wheel_publisher = self.create_publisher(Float64, '/rear_wheel_controller/command', 10)
+        self.wheelbase = 0.26
+
+        self.declare_parameter('serial_port', value="/dev/ttyAMA10")
+        self.serial_port_name = self.get_parameter('serial_port').value
+
+        self.declare_parameter('baud_rate', value=115200)
+        self.baud_rate = self.get_parameter('baud_rate').value
+
+        self.declare_parameter('serial_debug', value=False)
+        self.debug_serial_cmds = self.get_parameter('serial_debug').value
+        if self.debug_serial_cmds:
+            self.get_logger().info("Serial debug enabled")
+
+        self.get_logger().info(f"Connecting to port {self.serial_port_name} at {self.baud_rate}.")
+        self.conn = serial.Serial(self.serial_port_name, self.baud_rate, timeout=1.0)
+        self.get_logger().info(f"Connected to {self.conn.port}")
+        self.mutex = Lock()
+
+    def cmd_vel_callback(self, msg):
+        steering_angle = self.calculate_steering_angle(msg.angular.z, msg.linear.x)
+        wheel_velocity = msg.linear.x
+        
+        steering_msg = Float64()
+        steering_msg.data = steering_angle
+        self.steering_publisher.publish(steering_msg)
+        
+        wheel_msg = Float64()
+        wheel_msg.data = wheel_velocity
+        self.wheel_publisher.publish(wheel_msg)
+
+        self.send_serial_data(steering_angle, wheel_velocity)
+    
+    def calculate_steering_angle(self, angular_velocity, linear_velocity):
+        if linear_velocity == 0.0:
+            return 0.0
+        steering_angle = math.atan(self.wheelbase * angular_velocity / linear_velocity)
+        return steering_angle
+
+    def send_command(self, cmd_string):
+        self.mutex.acquire()
+        try:
+            cmd_string += "\r"
+            self.conn.write(cmd_string.encode("utf-8"))
+            if self.debug_serial_cmds:
+                self.get_logger().info(f"Sent: {cmd_string}")
+
+            c = ''
+            value = ''
+            while c != '\r':
+                c = self.conn.read(1).decode("utf-8")
+                if c == '':
+                    self.get_logger().error(f"Error: Serial timeout on command: {cmd_string}")
+                    return ''
+                value += c
+
+            value = value.strip('\r')
+            if self.debug_serial_cmds:
+                self.get_logger().info(f"Received: {value}")
+            return value
+        finally:
+            self.mutex.release()
+
+    def close_conn(self):
+        self.conn.close()
+
+    def send_serial_data(self, steering_angle, wheel_velocity):
+        data = f"{steering_angle:.3f};{wheel_velocity:.3f}\n"
+        self.send_command(data)
+        self.get_logger().info(f"Sent data to serial: {data.strip()}")
+
+def main(args=None):
+    rclpy.init(args=args)
+    serial_controller = SerialController()
+    rclpy.spin(serial_controller)
+    serial_controller.destroy_node()
+    serial_controller.close_conn()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
