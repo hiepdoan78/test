@@ -18,7 +18,8 @@ class SerialController(Node):
             10)
         self.steering_publisher = self.create_publisher(Float64, '/servo_steering_controller/command', 10)
         self.wheel_publisher = self.create_publisher(Float64, '/rear_wheel_controller/command', 10)
-        self.wheelbase = 0.26
+        self.wheelbase_length = 0.26
+        self.wheelbase_width = 0.26
 
         self.declare_parameter('serial_port', value="/dev/ttyAMA10")
         self.serial_port_name = self.get_parameter('serial_port').value
@@ -58,7 +59,7 @@ class SerialController(Node):
     def calculate_steering_angle(self, angular_velocity, linear_velocity):
         if linear_velocity == 0.0:
             return 0.0
-        steering_angle = math.atan(self.wheelbase * angular_velocity / linear_velocity)
+        steering_angle = math.atan(self.wheelbase_length /((self.wheelbase_length * angular_velocity / linear_velocity)-self.wheelbase_width/2) )
         return steering_angle
 
     def send_command(self, cmd_string):
@@ -100,7 +101,6 @@ class SerialController(Node):
         self.timer.start()
 
     def stop_robot(self):
-        self.get_logger().info("No command received for 2 seconds. Stopping the robot.")
         stop_steering_msg = Float64()
         stop_steering_msg.data = 0.0
         self.steering_publisher.publish(stop_steering_msg)
@@ -110,6 +110,7 @@ class SerialController(Node):
         self.wheel_publisher.publish(stop_wheel_msg)
 
         self.send_serial_data(0.0, 0.0)
+        self.get_logger().info("No command received for 2 seconds. Stopping the robot.")
 
 def main(args=None):
     rclpy.init(args=args)
