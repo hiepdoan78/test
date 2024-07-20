@@ -36,8 +36,9 @@ class SerialController(Node):
         self.get_logger().info(f"Connected to {self.conn.port}")
         self.mutex = Lock()
 
-        self.last_steering_angle = None
-        self.last_wheel_velocity = None
+        # Khởi tạo giá trị ban đầu cho góc lái và tốc độ bánh xe
+        self.last_steering_angle = 0.0
+        self.last_wheel_velocity = 0.0
 
     def joint_states_callback(self, msg):
         try:
@@ -50,16 +51,7 @@ class SerialController(Node):
             current_steering_angle = msg.position[steering_index]
             current_wheel_velocity = msg.velocity[wheel_index]
 
-            if self.last_steering_angle is None or self.last_wheel_velocity is None:
-                self.last_steering_angle = current_steering_angle
-                self.last_wheel_velocity = current_wheel_velocity
-                self.send_serial_data(current_steering_angle, current_wheel_velocity)
-            else:
-                if current_steering_angle != self.last_steering_angle or current_wheel_velocity != self.last_wheel_velocity:
-                    self.send_serial_data(current_steering_angle, current_wheel_velocity)
-                    self.last_steering_angle = current_steering_angle
-                    self.last_wheel_velocity = current_wheel_velocity
-
+            # Xuất bản giá trị hiện tại của góc lái và tốc độ bánh xe
             steering_msg = Float64()
             steering_msg.data = current_steering_angle
             self.steering_publisher.publish(steering_msg)
@@ -67,6 +59,12 @@ class SerialController(Node):
             wheel_msg = Float64()
             wheel_msg.data = current_wheel_velocity
             self.wheel_publisher.publish(wheel_msg)
+
+            # Kiểm tra sự thay đổi và gửi dữ liệu qua serial nếu có thay đổi
+            if current_steering_angle != self.last_steering_angle or current_wheel_velocity != self.last_wheel_velocity:
+                self.send_serial_data(current_steering_angle, current_wheel_velocity)
+                self.last_steering_angle = current_steering_angle
+                self.last_wheel_velocity = current_wheel_velocity
 
         except ValueError as e:
             self.get_logger().error(f"Joint name not found: {e}")
