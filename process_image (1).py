@@ -440,117 +440,88 @@ def offset(image, lines):
     return image
 
 
-Bình Nguyễn
 def find_offset(image, lines):
-
     wt, wd, dp = image.shape
     center_x = wd / 2
     cv2.line(image, (wd // 2, wt), (wd // 2, 0), [230, 43, 239], 2)
     x_left, x_right, y_left, y_right = [], [], [], []
-    offset_left, offset_right, y_offset_left, y_offset_right = [], [], [], []
-
+    offset = []
+    # ratio (pixel/cm)
+    ratio = 1
     for line in lines:
         angle, x1, y1, x2, y2 = find_angle(image, line)
-        if x1 < (center_x - 20):
+        if x1 < center_x:
             x_left.append(x1)
             y_left.append(y1)
-        if x1 > (center_x + 20):
-            x_right.append(x1)
-            y_right.append(y1)
-        if x2 < (center_x - 20):
             x_left.append(x2)
             y_left.append(y2)
-        if x2 > (center_x + 20):
+        else:
+            x_right.append(x1)
+            y_right.append(y1)
             x_right.append(x2)
             y_right.append(y2)
-    print(x_left, y_left, x_right, y_right)
-
-    left_x_empty = find_0(x_left)
-    right_x_empty = find_0(x_right)
-    left_y_empty = find_0(y_left)
-    right_y_empty = find_0(y_right)
-    print(left_x_empty, left_y_empty, right_x_empty, right_y_empty)
-
-    if left_x_empty == 0 and right_x_empty == 0 and left_y_empty == 0 and right_y_empty == 0:
+    #print(x_left, x_right, y_left, y_right)
+    left_empty = find_0(x_left)
+    right_empty = find_0(x_right)
+    #print(left_empty, right_empty)
+    #if len(x_left) > 0 and len(x_right) > 0:
+    if left_empty == 0 and right_empty == 0:
         line_left = np.polyfit(x_left, y_left, 1)
+        print(line_left)
         for i in range(len(y_right)):
             line_left[1] -= y_right[i]
             x_line_left = np.roots(line_left) // 1
             line_left[1] += y_right[i]
             a = np.int_(x_line_left[0])
             dist_left = abs(np.int_(a - x_right[i]))
-            center_lane_left = abs(np.int_(dist_left // 2))
+            mid_lane_left = abs(np.int_(dist_left // 2))
             if a > 0:
-                center_lane_left += a
-
-            offset_left.append(np.int_(center_x - center_lane_left))
-            y_offset_left.append(y_right[i])
-
-            #cv2.line(image, (a, y_right[i]), (x_right[i], y_right[i]), [230, 43, 239], 2)
+                mid_lane_left += a
+            offset.append(np.int_(center_x - mid_lane_left))
             #plt.plot(mid_lane_left, y_right[i], 'o')
 
         line_right = np.polyfit(x_right, y_right, 1)
+        print(line_right)
         for i in range(len(y_left)):
             line_right[1] -= y_left[i]
             x_line_right = np.roots(line_right) // 1
             line_right[1] += y_left[i]
             b = np.int_(x_line_right[0])
             dist_right = abs(np.int_(b - x_left[i]))
-            center_lane_right = abs(np.int_(dist_right // 2))
+            mid_lane_right = abs(np.int_(dist_right // 2))
             if b < wd:
-                center_lane_right += (wd - b)
-
-            offset_right.append(np.int_(center_x - center_lane_right))
-            y_offset_right.append(y_left[i])
-
-
-            #cv2.line(image, (b, y_left[i]), (x_left[i], y_left[i]), [230, 43, 239], 2)
+                mid_lane_right += (wd-b)
+            offset.append(np.int_(center_x - mid_lane_right))
             #plt.plot(mid_lane_right, y_right[i], 'o')
 
-        max_center_line_left, i = find_max(offset_left)
-        max_center_line_right, j = find_max(offset_right)
+    if left_empty != 0:
+        for i in range(len(y_right)):
+            x_left.append(0)
+            dist = abs(np.int_((x_left[i]) - (x_right[i])))
+            mid_lane = abs(np.int_(dist // 2))
+            offset.append(np.int_(center_x - mid_lane))
 
-        if abs(max_center_line_left) > 20 or abs(max_center_line_right) > 20:
-            if abs(y_offset_left[i]) > abs(y_offset_right[j]):
-                cv2.putText(image, 'Turn left', (int(wt * 3 / 4), int(wd / 3)), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                            (0, 255, 0), 2, cv2.LINE_AA)
-            elif abs(y_offset_left[i]) < abs(y_offset_right[j]):
-                cv2.putText(image, 'Turn right', (int(wt * 3 / 4), int(wd / 3)), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                            (0, 255, 0), 2, cv2.LINE_AA)
-        elif abs(max_center_line_left) <= 20 or abs(max_center_line_right) <= 20:
-            cv2.putText(image, 'Straight', (int(wt * 3 / 4), int(wd / 3)), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+    if right_empty != 0:
+        for i in range(len(y_left)):
+            x_right.append(wd)
+            dist = abs(np.int_((x_left[i]) - (x_right[i])))
+            mid_lane = abs(np.int_(dist // 2))
+            offset.append(np.int_(center_x - mid_lane))
+
+    max_offset = find_max(offset)
+
+    print(max_offset)
+    if abs(max_offset) > 15:
+        if max_offset < 0:
+            cv2.putText(image, 'Turn right', (int(wt * 3 / 4), int(wd / 3)), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                         (0, 255, 0), 2, cv2.LINE_AA)
-
-    if left_x_empty == 1 or left_y_empty == 1:
-        #for i in range(len(y_right)):
-        #    x_left.append(0)
-        #    dist = abs(np.int_((x_left[i]) - (x_right[i])))
-        #    center_lane = abs(np.int_(dist // 2))
-
-        cv2.putText(image, 'Turn left', (int(wt * 3 / 4), int(wd / 3)), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+        elif max_offset > 0:
+            cv2.putText(image, 'Turn left', (int(wt * 3 / 4), int(wd / 3)), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (0, 255, 0), 2, cv2.LINE_AA)
+    else:
+        cv2.putText(image, 'Straight', (int(wt * 3 / 4), int(wd / 3)), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                     (0, 255, 0), 2, cv2.LINE_AA)
-
-    if right_x_empty == 1 or right_y_empty == 1:
-        #for i in range(len(y_left)):
-        #    x_right.append(wd)
-        #    dist = abs(np.int_((x_left[i]) - (x_right[i])))
-        #    center_lane = abs(np.int_(dist // 2))
-        cv2.putText(image, 'Turn right', (int(wt * 3 / 4), int(wd / 3)), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                    (0, 255, 0), 2, cv2.LINE_AA)
-
-
-    #average_offset = find_max(offset)
-    #print(offset)
-    #if abs(average_offset) > 30:
-    #    if average_offset < 0:
-    #        cv2.putText(image, 'Turn right', (int(wt * 3 / 4), int(wd / 3)), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-    #                    (0, 255, 0), 2, cv2.LINE_AA)
-    #    elif average_offset > 0:
-    #        cv2.putText(image, 'Turn left', (int(wt * 3 / 4), int(wd / 3)), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-    #                    (0, 255, 0), 2, cv2.LINE_AA)
-    #else:
-    #    cv2.putText(image, 'Straight', (int(wt * 3 / 4), int(wd / 3)), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-    #                (0, 255, 0), 2, cv2.LINE_AA)
     return image
+
 
 
